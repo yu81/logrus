@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -55,6 +56,7 @@ type TextFormatter struct {
 	// Whether the logger's out is to a terminal
 	isTerminal         bool
 	terminalDetermined bool
+	terminalLock       sync.RWMutex
 }
 
 func (f *TextFormatter) Format(entry *Entry) ([]byte, error) {
@@ -75,12 +77,19 @@ func (f *TextFormatter) Format(entry *Entry) ([]byte, error) {
 
 	prefixFieldClashes(entry.Data)
 
-	if !f.terminalDetermined {
+	f.terminalLock.RLock()
+	terminalDetermined := f.terminalDetermined
+	isTerminal := f.isTerminal
+	f.terminalLock.RUnlock()
+
+	if !terminalDetermined {
+		f.terminalLock.Lock()
 		f.isTerminal = IsTerminal(entry.Logger.Out)
 		f.terminalDetermined = true
+		f.terminalLock.Unlock()
 	}
 
-	isColored := (f.ForceColors || f.isTerminal) && !f.DisableColors
+	isColored := (f.ForceColors || isTerminal) && !f.DisableColors
 
 	timestampFormat := f.TimestampFormat
 	if timestampFormat == "" {
